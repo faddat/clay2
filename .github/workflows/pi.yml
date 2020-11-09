@@ -1,0 +1,67 @@
+# This is a basic workflow that is manually triggered
+
+name: clay2 Pi
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on: [push, pull_request]
+
+
+# This workflow makes a 64 bit Raspberry Pi Ubuntu Server Image.
+# It does not have the security issues mentioned here: https://github.com/tendermint/tendermint/blob/master/docs/tendermint-core/running-in-production.md#validator-signing-on-32-bit-architectures-or-arm
+# Later, more devices will be supported, as well.
+
+
+jobs:
+  build:
+    name: clay2 Pi Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out clay2
+        uses: actions/checkout@v2
+
+      - name: Setup go
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.15
+
+      - name: Compile clay2
+        run: |
+            cd cmd/clay2d
+            go build .
+            cd ..
+            cd clay2cli
+            go build .
+        env:
+          GOOS: linux
+          GOARCH: arm64
+
+      - name: Upload clay2 Arm64 CLI
+        uses: actions/upload-artifact@v2
+        with:
+          name: clay2cli arm64
+          path: cmd/clay2cli/clay2cli
+
+      - name: Upload clay2 Arm64 daemon
+        uses: actions/upload-artifact@v2
+        with:
+          name: clay2d arm64
+          path: cmd/clay2d/clay2d
+
+      - name: Build clay2.img
+        run: docker run --rm --privileged -v /dev:/dev -v ${PWD}:/build mkaczanowski/packer-builder-arm build .pi/pibuild.json
+
+      - name: Install PiShrink
+        run: |
+          wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+          chmod +x pishrink.sh
+          sudo mv pishrink.sh /usr/local/bin
+
+      - name: Shrink clay2.img
+        run: sudo pishrink.sh -a -Z -v clay2.img
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: clay2 PI
+          path: clay2.img.xz
